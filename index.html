@@ -1,0 +1,1825 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>라이브 커머스 콘솔 V6</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet"/>
+<style>
+*{font-family:'Pretendard',sans-serif;margin:0;padding:0;box-sizing:border-box}
+@keyframes glow{0%,100%{box-shadow:0 0 20px rgba(239,68,68,0.5)}50%{box-shadow:0 0 30px rgba(239,68,68,0.8)}}
+@keyframes flash{0%,100%{background:rgba(99,102,241,0.15);border-color:#6366f1}50%{background:rgba(99,102,241,0.35);border-color:#818cf8}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes heartFloat{0%{opacity:0;transform:translateY(0) scale(0)}20%{opacity:1;transform:translateY(-20px) scale(1)}100%{opacity:0;transform:translateY(-150px) scale(0.5)}}
+.live-badge{animation:glow 2s infinite}
+.flash-highlight{animation:flash 2s 3}
+.chat-fade-in{animation:slideUp 0.3s ease-out}
+.heart-animation{animation:heartFloat 2s ease-out forwards}
+.mobile-screen{background:linear-gradient(to bottom,#000,#1a1a1a);aspect-ratio:9/16;position:relative;overflow:hidden}
+.product-card{cursor:move;transition:0.2s}
+.product-card:hover{transform:translateY(-2px)}
+.product-card.dragging{opacity:0.5}
+.toggle-switch{position:relative;width:44px;height:22px;background:#4b5563;border-radius:11px;cursor:pointer;transition:0.3s;display:inline-block}
+.toggle-switch.active{background:#6366f1}
+.toggle-switch::after{content:'';position:absolute;width:18px;height:18px;background:white;border-radius:50%;top:2px;left:2px;transition:0.3s}
+.toggle-switch.active::after{left:24px}
+.chip{transition:0.2s;cursor:pointer}
+.chip.active{background:#6366f1;color:white}
+.tab-active{border-bottom:3px solid #6366f1;color:#6366f1}
+.chat-gradient{background:linear-gradient(to top,rgba(0,0,0,0.9) 0%,rgba(0,0,0,0.6) 50%,transparent 100%)}
+.chat-message{padding:8px 12px;border-radius:8px;margin-bottom:6px;font-size:13px;line-height:1.4;word-break:break-word}
+.chat-size-1{font-size:11px}
+.chat-size-2{font-size:13px}
+.chat-size-3{font-size:15px}
+.chat-size-4{font-size:17px}
+.chat-size-5{font-size:19px}
+.qna-tab{cursor:pointer;padding:12px 20px;border-bottom:2px solid transparent;transition:0.2s}
+.qna-tab.active{border-bottom-color:#ef4444;color:#ef4444;font-weight:600}
+.registered-product-item:has(input:checked){background:#334155;border-color:#6366f1}
+</style>
+</head>
+<body class="bg-slate-950 text-white">
+
+<header class="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-50">
+<div class="max-w-[2400px] mx-auto">
+<div class="flex justify-between items-center">
+<div class="flex gap-4 items-center">
+<div class="live-badge bg-red-500 px-4 py-2 rounded-full font-bold flex items-center gap-2">
+<div class="w-2 h-2 bg-white rounded-full animate-pulse"></div>LIVE
+</div>
+<div class="flex items-center gap-2">
+<h1 id="liveTitle" class="text-xl font-bold">봄 신상 특가 라이브 🌸</h1>
+<button onclick="editTitle()" class="p-2 hover:bg-slate-800 rounded-lg transition">✏️</button>
+</div>
+<div id="liveTime" class="text-lg font-mono text-indigo-400 flex items-center gap-2">🕐 00:00:00</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 px-3 py-2 bg-slate-800/50 rounded-lg">🌡️ <span id="temperature">42</span>°C</div>
+<div class="flex items-center gap-2 px-3 py-2 bg-slate-800/50 rounded-lg">📶 양호</div>
+<button onclick="endBroadcast()" class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition">방송 종료</button>
+</div>
+</div>
+
+<div class="flex gap-6 mt-4 border-b border-slate-800">
+<button onclick="switchTab('streaming')" id="tab-streaming" class="tab-active px-4 py-3 font-semibold transition text-base">📡 라이브 스트리밍 관리</button>
+<button onclick="switchTab('dashboard')" id="tab-dashboard" class="px-4 py-3 font-semibold transition hover:text-indigo-400 text-base">📊 실시간 데이터 대시보드</button>
+<button onclick="switchTab('prompter')" id="tab-prompter" class="px-4 py-3 font-semibold transition hover:text-indigo-400 text-base">📄 프롬프터</button>
+<button onclick="switchTab('inquiry')" id="tab-inquiry" class="px-4 py-3 font-semibold transition hover:text-indigo-400 text-base">💬 1:1 문의</button>
+</div>
+</div>
+</header>
+
+<!-- 통계 카드 -->
+<div id="stats-section" class="max-w-[2400px] mx-auto px-4 pt-4">
+<div class="grid gap-3 mb-4" id="statsGrid" style="grid-template-columns:repeat(6,1fr)">
+<div id="stat-liveTime" class="bg-slate-900/50 backdrop-blur-lg rounded-xl p-4 border border-slate-800">
+<div class="flex items-center gap-2 text-slate-400 mb-2 text-sm">⏱️ 라이브 진행 시간</div>
+<div class="text-3xl font-bold text-cyan-400" id="stat-liveTime-value">00:00:00</div>
+</div>
+<div id="stat-currentViewers" class="bg-slate-900/50 backdrop-blur-lg rounded-xl p-4 border border-slate-800">
+<div class="flex items-center gap-2 text-slate-400 mb-2 text-sm">👥 실시간 접속</div>
+<div class="text-3xl font-bold text-indigo-400" id="currentViewers">1,247</div>
+</div>
+<div id="stat-totalViewers" class="bg-slate-900/50 backdrop-blur-lg rounded-xl p-4 border border-slate-800">
+<div class="flex items-center gap-2 text-slate-400 mb-2 text-sm">👁️ 누적 접속</div>
+<div class="text-3xl font-bold text-purple-400" id="totalViewers">3,821</div>
+</div>
+<div id="stat-likes" class="bg-slate-900/50 backdrop-blur-lg rounded-xl p-4 border border-slate-800">
+<div class="flex items-center gap-2 text-slate-400 mb-2 text-sm">❤️ 좋아요</div>
+<div class="text-3xl font-bold text-pink-400" id="likes">892</div>
+</div>
+<div id="stat-orderCount" class="bg-slate-900/50 backdrop-blur-lg rounded-xl p-4 border border-slate-800">
+<div class="flex items-center gap-2 text-slate-400 mb-2 text-sm">🛒 주문 건수</div>
+<div class="text-3xl font-bold text-emerald-400" id="orderCount">127</div>
+</div>
+<div id="stat-totalSales" class="bg-slate-900/50 backdrop-blur-lg rounded-xl p-4 border border-slate-800">
+<div class="flex items-center gap-2 text-slate-400 mb-2 text-sm">💰 총 매출</div>
+<div class="text-3xl font-bold text-green-400" id="totalSales">₩0</div>
+</div>
+
+<button onclick="showModal('statsConfig')" class="bg-slate-900/50 backdrop-blur-lg rounded-xl p-4 border border-slate-800 hover:bg-slate-800/50 transition flex items-center justify-center">
+<div class="text-4xl text-slate-500">+</div>
+</button>
+</div>
+</div>
+
+<!-- 스트리밍 탭 -->
+<div id="content-streaming" class="tab-content">
+<div class="max-w-[2400px] mx-auto px-4 pb-4">
+<div class="grid grid-cols-12 gap-4">
+
+<!-- 컬럼1: 방송화면 (3열) -->
+<div class="col-span-3">
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-slate-800 p-4">
+<h3 class="text-lg font-bold mb-3">📱 방송 화면</h3>
+<div class="mobile-screen rounded-xl relative" id="mobileScreen">
+<img src="https://media.giphy.com/media/3o7btPCcdNniyf0ArS/giphy.gif" class="w-full h-full object-cover opacity-30 absolute inset-0"/>
+<div id="memoBox" class="absolute top-3 left-3 bg-yellow-400/80 text-black p-2 rounded text-xs hidden z-20 max-w-[140px]" style="font-weight:600;line-height:1.4;"></div>
+<div id="noticeAlert" class="absolute top-16 left-0 right-0 px-3 z-10"></div>
+<div class="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/80 to-transparent z-10">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-xs font-bold">S</div>
+<div>
+<div class="text-xs font-semibold">건강샵</div>
+<div class="text-[10px] text-slate-300"><span id="mobileViewers">1,247</span> 시청중</div>
+</div>
+</div>
+<button onclick="openStorePopup()" class="bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold hover:bg-white/30 transition">🛍️ 스토어</button>
+</div>
+</div>
+<div id="heartsContainer" class="absolute bottom-0 left-0 right-0 pointer-events-none z-10"></div>
+<div id="chatContainer" class="absolute left-0 right-0 px-3 chat-gradient transition-all duration-300 z-10" style="bottom:60px;max-height:200px;"></div>
+<div id="productCTA" class="absolute left-0 right-0 bottom-3 px-3 z-20"></div>
+</div>
+</div>
+</div>
+
+<!-- 컬럼2: 상품관리 (4열) -->
+<div class="col-span-4">
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-slate-800 p-4">
+<div class="flex justify-between mb-4">
+<h2 class="text-xl font-bold">📦 상품 관리</h2>
+<div class="flex gap-2">
+<button onclick="showModal('registered')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-semibold text-sm">➕ 등록된 상품</button>
+<button onclick="showModal('flash')" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold text-sm">⚡ 플래시 상품</button>
+</div>
+</div>
+<div class="relative mb-4">
+<input type="text" id="searchInput" placeholder="상품명, 상품코드로 검색..." class="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg focus:border-indigo-500 focus:outline-none text-sm" onkeyup="filterProducts()"/>
+<span class="absolute left-3 top-1/2 -translate-y-1/2">🔍</span>
+</div>
+<div class="flex items-center justify-between mb-3">
+<div class="text-xs text-slate-400">목록 <span id="productCount">20</span>개</div>
+<div class="text-xs text-slate-400">페이지 <span id="currentPage">1</span> / <span id="totalPages">2</span></div>
+</div>
+<div id="productList" class="space-y-2 mb-4 max-h-[600px] overflow-y-auto"></div>
+<div id="pagination" class="flex justify-center gap-2"></div>
+</div>
+</div>
+
+<!-- 컬럼3: 채팅관리 (3열) -->
+<div class="col-span-3">
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-slate-800 p-4">
+<div class="flex items-center justify-between mb-3">
+<h3 class="text-base font-bold">💬 실시간 채팅</h3>
+<div class="flex gap-2">
+<button onclick="showModal('autoRepeat')" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">자동반복</button>
+<button onclick="showModal('chatManagement')" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">채팅관리</button>
+<button onclick="changeChatSize()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">+가 <span id="chatSizeIndicator">2</span></button>
+</div>
+</div>
+<div id="chatManager" class="space-y-1 h-[560px] overflow-y-auto p-2 bg-slate-800/30 rounded-lg mb-3"></div>
+
+<!-- 채팅 입력 -->
+<div class="flex gap-2">
+<input type="text" id="chatInputBox" placeholder="채팅 메시지 입력..." class="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm" onkeypress="if(event.keyCode==13)sendSellerChat()"/>
+<button onclick="sendSellerChat()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-semibold text-sm">전송</button>
+</div>
+</div>
+</div>
+
+<!-- 컬럼4: 유저관리+공지+게임 (2열) -->
+<div class="col-span-2 space-y-3">
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-xl border border-slate-800 p-4">
+<h3 class="text-base font-bold mb-3">👥 유저 관리</h3>
+<div class="space-y-2">
+<button onclick="showModal('memo')" class="w-full px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-left transition text-sm">메모 작성</button>
+</div>
+</div>
+
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-xl border border-slate-800 p-4">
+<h3 class="text-base font-bold mb-3">⚙️ 유저 안내 설정</h3>
+
+<!-- Q&A 탭 -->
+<div class="flex mb-3 border-b border-slate-700">
+<div class="qna-tab active" onclick="switchQnaTab('liveqa')">LIVE Q&A</div>
+<div class="qna-tab" onclick="switchQnaTab('notice')">공지사항</div>
+</div>
+
+<div id="qna-liveqa" class="qna-content">
+<div id="qnaList" class="space-y-2 max-h-[200px] overflow-y-auto"></div>
+</div>
+
+<div id="qna-notice" class="qna-content hidden">
+<div class="space-y-2">
+<button onclick="editNotice('intro')" class="w-full px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-left transition text-xs">라이브 소개</button>
+<button onclick="editNotice('benefits')" class="w-full px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-left transition text-xs">혜택 정보</button>
+<button onclick="editNotice('shipping')" class="w-full px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-left transition text-xs">배송 정보</button>
+<button onclick="editNotice('size')" class="w-full px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-left transition text-xs">사이즈 정보</button>
+</div>
+</div>
+</div>
+
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-xl border border-slate-800 p-4">
+<h3 class="text-base font-bold mb-3">🎮 게임 설정</h3>
+<div class="flex gap-2 justify-center">
+<button onclick="alert('준비중')" class="flex flex-col items-center gap-1 p-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition flex-1">
+<span class="text-2xl">🏃</span>
+<span class="text-[10px]">선착순</span>
+</button>
+<button onclick="alert('준비중')" class="flex flex-col items-center gap-1 p-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition flex-1">
+<span class="text-2xl">🎲</span>
+<span class="text-[10px]">추첨</span>
+</button>
+<button onclick="alert('준비중')" class="flex flex-col items-center gap-1 p-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition flex-1">
+<span class="text-2xl">🔨</span>
+<span class="text-[10px]">경매</span>
+</button>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- 대시보드 탭 -->
+<div id="content-dashboard" class="tab-content hidden">
+<div class="max-w-[2400px] mx-auto p-4">
+<h2 class="text-3xl font-bold mb-6">📊 실시간 데이터 대시보드</h2>
+
+<div class="grid grid-cols-12 gap-4">
+<!-- 대시보드 (그래프) -->
+<div class="col-span-5">
+<div class="flex gap-3 mb-4">
+<button onclick="changeChart('all')" class="chip active px-4 py-2 bg-slate-800 rounded-full font-semibold text-sm">전체</button>
+<button onclick="changeChart('viewers')" class="chip px-4 py-2 bg-slate-800 rounded-full font-semibold text-sm">👥 시청자</button>
+<button onclick="changeChart('sales')" class="chip px-4 py-2 bg-slate-800 rounded-full font-semibold text-sm">💰 주문금액</button>
+<button onclick="changeChart('orders')" class="chip px-4 py-2 bg-slate-800 rounded-full font-semibold text-sm">🛒 주문건수</button>
+</div>
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-slate-800 p-6 relative">
+<div id="salesMarkers" class="absolute top-12 left-6 right-6 flex gap-1 pointer-events-none z-10"></div>
+<canvas id="chart" width="400" height="200"></canvas>
+</div>
+</div>
+
+<!-- 상품 -->
+<div class="col-span-3">
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-slate-800 p-6">
+<h3 class="text-xl font-bold mb-4">🏆 판매 상품 TOP 10</h3>
+<div id="topProducts" class="space-y-2 max-h-[500px] overflow-y-auto pr-2"></div>
+</div>
+
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-slate-800 p-6 mt-4">
+<h3 class="text-xl font-bold mb-4">⚠️ 품절 상품</h3>
+<div id="soldoutProducts" class="max-h-[300px] overflow-y-auto pr-2"></div>
+</div>
+
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-slate-800 p-6 mt-4">
+<h3 class="text-xl font-bold mb-4">🔄 취소한 상품</h3>
+<div id="cancelProducts" class="max-h-[300px] overflow-y-auto pr-2"></div>
+</div>
+</div>
+
+<!-- 방송운영+참여+매출+전환 -->
+<div class="col-span-4 space-y-4">
+<!-- 방송 운영 및 트래픽 -->
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-slate-800 p-6">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-xl font-bold">📊 방송 운영 및 트래픽</h3>
+<button class="text-slate-400 hover:text-white transition" title="Traffic & Live Status - 방송의 기본 운영 지표와 트래픽 현황">ℹ️</button>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">라이브 진행 시간</div>
+<div class="text-lg font-bold text-indigo-400" id="dash-liveTime">00:00:00</div>
+<div class="text-[10px] text-slate-500 mt-1">방송 시작 후 경과 시간</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">실시간 접속 수</div>
+<div class="text-lg font-bold text-cyan-400" id="dash-currentViewers">1,247</div>
+<div class="text-[10px] text-slate-500 mt-1">현재 시청 중 (App + Web)</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">누적 접속 수 (PV)</div>
+<div class="text-lg font-bold text-purple-400" id="dash-totalViewers">3,821</div>
+<div class="text-[10px] text-slate-500 mt-1">전체 시청 횟수 합산</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">시청 유지율</div>
+<div class="text-lg font-bold text-blue-400">78.5%</div>
+<div class="text-[10px] text-slate-500 mt-1">실시간 / 최고 접속 수</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">신규 유저 비율</div>
+<div class="text-lg font-bold text-pink-400">42.3%</div>
+<div class="text-[10px] text-slate-500 mt-1">첫 방문 유저 비율</div>
+</div>
+</div>
+</div>
+
+<!-- 참여 및 커뮤니티 -->
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-slate-800 p-6">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-xl font-bold">❤️ 참여 및 커뮤니티</h3>
+<button class="text-slate-400 hover:text-white transition" title="Engagement & Interaction - 시청자 참여도 및 커뮤니티 활동 지표">ℹ️</button>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">좋아요 수</div>
+<div class="text-lg font-bold text-pink-400" id="dash-likes">892</div>
+<div class="text-[10px] text-slate-500 mt-1">방송 중 받은 좋아요 총합</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">팔로우 수</div>
+<div class="text-lg font-bold text-yellow-400">156</div>
+<div class="text-[10px] text-slate-500 mt-1">신규 팔로우 수</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">팔로우 비율</div>
+<div class="text-lg font-bold text-cyan-400">12.8%</div>
+<div class="text-[10px] text-slate-500 mt-1">(팔로우 / 실시간 접속) × 100</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">후원 금액</div>
+<div class="text-lg font-bold text-amber-400">₩128,500</div>
+<div class="text-[10px] text-slate-500 mt-1">총 후원 금액</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">후원 전환율</div>
+<div class="text-lg font-bold text-orange-400">3.2%</div>
+<div class="text-[10px] text-slate-500 mt-1">후원자 / 실시간 접속</div>
+</div>
+</div>
+</div>
+
+<!-- 실시간 매출 및 주문 -->
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-slate-800 p-6">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-xl font-bold">💰 실시간 매출 및 주문</h3>
+<button class="text-slate-400 hover:text-white transition" title="Sales & Transaction - 주문 및 매출 현황">ℹ️</button>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">주문 금액</div>
+<div class="text-lg font-bold text-green-400" id="dash-totalSales">₩0</div>
+<div class="text-[10px] text-slate-500 mt-1">결제 완료 총액 (취소 미반영)</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">실거래 금액</div>
+<div class="text-lg font-bold text-emerald-400">₩0</div>
+<div class="text-[10px] text-slate-500 mt-1">주문 - 취소 (순매출)</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">주문 수</div>
+<div class="text-lg font-bold text-blue-400" id="dash-orderCount">127</div>
+<div class="text-[10px] text-slate-500 mt-1">전체 주문 건수</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">주문 인원수</div>
+<div class="text-lg font-bold text-sky-400">89</div>
+<div class="text-[10px] text-slate-500 mt-1">주문한 고유 유저 수</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">주문 취소 수</div>
+<div class="text-lg font-bold text-red-400">3</div>
+<div class="text-[10px] text-slate-500 mt-1">결제 후 취소 건수</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">장바구니 점유 수</div>
+<div class="text-lg font-bold text-orange-400">67</div>
+<div class="text-[10px] text-slate-500 mt-1">장바구니 담기 총 횟수</div>
+</div>
+</div>
+</div>
+
+<!-- 전환 상태 및 효율 -->
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-slate-800 p-6">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-xl font-bold">💳 전환 상태 및 효율</h3>
+<button class="text-slate-400 hover:text-white transition" title="Conversion & Efficiency - 전환율 및 효율성 지표">ℹ️</button>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">재고 대비 전환율</div>
+<div class="text-lg font-bold text-green-400">35.2%</div>
+<div class="text-[10px] text-slate-500 mt-1">재고 대비 결제 완료 비율</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">장바구니 전환율</div>
+<div class="text-lg font-bold text-emerald-400">68.9%</div>
+<div class="text-[10px] text-slate-500 mt-1">장바구니 → 결제 비율</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">미전환 장바구니</div>
+<div class="text-base font-bold text-blue-400">₩2,450,000</div>
+<div class="text-[10px] text-slate-500 mt-1">미결제 장바구니 총액</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">1인당 장바구니</div>
+<div class="text-base font-bold text-indigo-400">₩48,200</div>
+<div class="text-[10px] text-slate-500 mt-1">평균 장바구니 금액</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">1인당 결제금액</div>
+<div class="text-base font-bold text-purple-400">₩65,800</div>
+<div class="text-[10px] text-slate-500 mt-1">객단가 (ARPU)</div>
+</div>
+<div class="p-3 bg-slate-800/50 rounded-xl">
+<div class="text-xs text-slate-400 mb-1">결제 취소율</div>
+<div class="text-lg font-bold text-red-400">2.8%</div>
+<div class="text-[10px] text-slate-500 mt-1">(취소 / 전체 주문) × 100</div>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- 프롬프터 탭 -->
+<div id="content-prompter" class="tab-content hidden">
+<div class="max-w-[2400px] mx-auto p-4">
+<div class="grid grid-cols-3 gap-4">
+<div class="col-span-2 bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-slate-800 p-6">
+<h2 class="text-2xl font-bold mb-4">📄 판매자 대본</h2>
+
+<div class="mb-4 flex gap-4">
+<div class="flex items-center gap-2">
+<label class="text-xs font-semibold">크기:</label>
+<input type="number" id="scriptFontSize" value="20" min="12" max="48" class="w-16 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-sm" onchange="updateScriptStyle()"/>
+</div>
+<div class="flex items-center gap-2">
+<label class="text-xs font-semibold">색상:</label>
+<input type="color" id="scriptColor" value="#ffffff" class="w-10 h-8 bg-slate-800 border border-slate-700 rounded cursor-pointer" onchange="updateScriptStyle()"/>
+</div>
+</div>
+
+<div id="scriptEditor" contenteditable="true" class="p-4 rounded-xl min-h-[600px] outline-none overflow-y-auto" style="background:#1e293b;color:#ffffff;font-size:20px;line-height:1.8;">
+안녕하세요 여러분! 오늘 특별한 상품을 준비했습니다.
+
+🌸 봄 신상 특가 라이브에 오신 것을 환영합니다!
+
+오늘 소개할 상품들:
+1. 프리미엄 에너지바 - 24,000원
+2. 유기농 프로틴 파우더 - 48,000원
+
+지금 바로 주문하세요 💪
+</div>
+</div>
+
+<div class="bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-slate-800 p-6">
+<h2 class="text-2xl font-bold mb-4">📝 운영 메모장</h2>
+
+<textarea id="memoEditor" class="w-full h-[680px] p-4 bg-slate-800 border border-slate-700 rounded-xl resize-none outline-none text-white" placeholder="운영 메모를 자유롭게 작성하세요...
+
+예시:
+- 10분: 에너지바 할인 시작
+- 20분: Q&A 시간
+- 30분: 플래시 상품 공개
+"></textarea>
+</div>
+</div>
+</div>
+</div>
+
+<!-- 1:1 문의 탭 -->
+<div id="content-inquiry" class="tab-content hidden">
+<div class="flex h-[calc(100vh-140px)]">
+<aside style="width:350px;background:linear-gradient(to bottom,#1e293b,#0f172a);" class="border-r border-slate-700 flex flex-col">
+<div class="p-5 border-b border-slate-700">
+<h2 class="text-xl font-bold text-white">문의 관리</h2>
+</div>
+<div class="flex-1 overflow-y-auto p-3" id="inquiryList"></div>
+</aside>
+
+<main class="flex-1 flex flex-col bg-slate-900">
+<header class="p-4 border-b border-slate-700">
+<h3 id="chatName" class="text-lg font-bold text-white">사용자를 선택하세요</h3>
+</header>
+<div class="flex-1 bg-slate-800 p-6 overflow-y-auto" id="chatArea" style="display:flex;flex-direction:column;"></div>
+<div class="p-4 border-t border-slate-700">
+<input type="text" id="chatInput" placeholder="메시지..." class="w-full p-2 bg-slate-800 rounded" onkeypress="if(event.keyCode==13)sendMsg()"/>
+</div>
+</main>
+
+<aside class="w-80 bg-slate-900 border-l border-slate-700 p-6">
+<h3 class="font-bold mb-4">고객 정보</h3>
+<div id="customerInfo"></div>
+</aside>
+</div>
+</div>
+
+<div id="modalContainer"></div>
+<div id="storePopup" class="fixed inset-0 bg-black/70 z-50 hidden flex items-center justify-center" onclick="closeStorePopup(event)">
+<div class="bg-slate-900 rounded-2xl p-6 max-w-2xl w-full m-4 max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-2xl font-bold">🛍️ 스토어 상품</h3>
+<button onclick="closeStorePopup()" class="p-2 hover:bg-slate-800 rounded-lg">✖️</button>
+</div>
+<div id="storeProductList" class="space-y-3"></div>
+</div>
+</div>
+
+<script>
+let time=0;
+let stats={currentViewers:1247,totalViewers:3821,likes:892,orderCount:127,totalSales:0};
+let currentPage=1;
+let itemsPerPage=10;
+let lastFlashId=null;
+let draggedId=null;
+let chatSize=2;
+let autoRepeatInterval=null;
+let autoRepeatMsg='';
+let autoRepeatSec=0;
+let selectedAutoRepeatBtn=null;
+let qnaList=[
+{id:1,user:'Igo154814',question:'추첨에 참여했습니다.',answer:'응원에로로로',time:'2026.01.22, 11:35'},
+{id:2,user:'치즈애나',question:'배송은 어떻게하나요?',answer:'3만원 이상이 무료배송이니, 스토어에서 3만원 이상 무배 탑어주세요!',time:'2026.01.22, 11:42'},
+{id:3,user:'치즈애나',question:'뭐하세요',answer:'안녕하세요?',time:'2026.01.22, 11:34'}
+];
+
+// 커스터마이징 가능한 모든 지표
+let allMetrics=[
+{id:'liveTime',name:'라이브 진행 시간',icon:'⏱️',value:'00:00:00',color:'cyan'},
+{id:'currentViewers',name:'실시간 접속',icon:'👥',value:'1,247',color:'indigo'},
+{id:'totalViewers',name:'누적 접속',icon:'👁️',value:'3,821',color:'purple'},
+{id:'viewerRetention',name:'시청 유지율',icon:'📊',value:'78.5%',color:'blue'},
+{id:'newUserRate',name:'신규 유저 비율',icon:'🆕',value:'42.3%',color:'teal'},
+{id:'likes',name:'좋아요',icon:'❤️',value:'892',color:'pink'},
+{id:'follows',name:'팔로우 수',icon:'⭐',value:'156',color:'yellow'},
+{id:'followRate',name:'팔로우 전환율',icon:'📈',value:'12.8%',color:'lime'},
+{id:'donations',name:'후원 금액',icon:'💝',value:'₩128,500',color:'rose'},
+{id:'donationRate',name:'후원 전환율',icon:'💰',value:'3.2%',color:'amber'},
+{id:'totalSales',name:'주문 금액',icon:'💰',value:'₩0',color:'green'},
+{id:'realSales',name:'실거래 금액',icon:'💵',value:'₩0',color:'emerald'},
+{id:'orderCount',name:'주문 건수',icon:'🛒',value:'127',color:'emerald'},
+{id:'orderUsers',name:'주문 인원수',icon:'👨‍👩‍👧‍👦',value:'89',color:'sky'},
+{id:'cancelCount',name:'주문 취소 수',icon:'🔄',value:'3',color:'red'},
+{id:'cartCount',name:'장바구니 점유 수',icon:'🛍️',value:'67',color:'orange'},
+{id:'stockConversion',name:'재고 대비 결제 전환율',icon:'📦',value:'35.2%',color:'green'},
+{id:'cartConversion',name:'장바구니 결제 전환율',icon:'🔄',value:'68.9%',color:'emerald'},
+{id:'unconv ertedCart',name:'미전환 장바구니 금액',icon:'⏳',value:'₩2,450,000',color:'blue'},
+{id:'avgCartAmount',name:'1인당 평균 장바구니',icon:'💳',value:'₩48,200',color:'indigo'},
+{id:'avgOrderAmount',name:'1인당 평균 결제금액',icon:'💰',value:'₩65,800',color:'purple'},
+{id:'cancelRate',name:'결제 취소율',icon:'❌',value:'2.8%',color:'red'}
+];
+
+let selectedMetrics=['liveTime','currentViewers','totalViewers','likes','orderCount','totalSales'];
+
+// 20개 상품 생성
+let products=[
+{id:1,code:'P001',name:'프리미엄 에너지바 12입',price:24000,discountRate:0,image:'https://images.unsplash.com/photo-1606312619070-d48b4cda2f97?w=200',stock:150,cart:23,sold:45,cancel:2,limited:false,limitedStatus:null,store:false,soldPrice:24000,soldCount:45,soldout:false},
+{id:2,code:'P002',name:'유기농 프로틴 파우더 1kg',price:48000,discountRate:0,image:null,stock:80,cart:12,sold:28,cancel:1,limited:false,limitedStatus:null,store:false,soldPrice:48000,soldCount:28,soldout:false},
+{id:3,code:'P003',name:'비타민C 이뮤니티 부스터',price:36000,discountRate:0,image:'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=200',stock:200,cart:8,sold:15,cancel:0,limited:false,limitedStatus:null,store:false,soldPrice:36000,soldCount:15,soldout:false},
+{id:4,code:'P004',name:'콜라겐 부스터 파우더',price:52000,discountRate:0,image:'https://images.unsplash.com/photo-1556742400-b5d6e8fa01c0?w=200',stock:120,cart:15,sold:32,cancel:1,limited:false,limitedStatus:null,store:false,soldPrice:52000,soldCount:32,soldout:false},
+{id:5,code:'P005',name:'오메가3 프리미엄 60캡슐',price:68000,discountRate:0,image:null,stock:90,cart:18,sold:25,cancel:0,limited:false,limitedStatus:null,store:false,soldPrice:68000,soldCount:25,soldout:false},
+{id:6,code:'P006',name:'유산균 30포 세트',price:42000,discountRate:0,image:'https://images.unsplash.com/photo-1556742400-b5d6e8fa01c0?w=200',stock:180,cart:22,sold:38,cancel:2,limited:false,limitedStatus:null,store:false,soldPrice:42000,soldCount:38,soldout:false},
+{id:7,code:'P007',name:'마그네슘 비타민 세트',price:35000,discountRate:0,image:'https://images.unsplash.com/photo-1606312619070-d48b4cda2f97?w=200',stock:160,cart:10,sold:20,cancel:0,limited:false,limitedStatus:null,store:false,soldPrice:35000,soldCount:20,soldout:false},
+{id:8,code:'P008',name:'철분제 3개월분',price:28000,discountRate:0,image:null,stock:210,cart:14,sold:22,cancel:1,limited:false,limitedStatus:null,store:false,soldPrice:28000,soldCount:22,soldout:false},
+{id:9,code:'P009',name:'칼슘 마그네슘 아연',price:38000,discountRate:0,image:'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=200',stock:140,cart:19,sold:27,cancel:0,limited:false,limitedStatus:null,store:false,soldPrice:38000,soldCount:27,soldout:false},
+{id:10,code:'P010',name:'루테인 지아잔틴',price:45000,discountRate:0,image:'https://images.unsplash.com/photo-1556742400-b5d6e8fa01c0?w=200',stock:100,cart:16,sold:30,cancel:1,limited:false,limitedStatus:null,store:false,soldPrice:45000,soldCount:30,soldout:false},
+{id:11,code:'P011',name:'밀크씨슬 간 건강',price:32000,discountRate:0,image:null,stock:130,cart:11,sold:18,cancel:0,limited:false,limitedStatus:null,store:false,soldPrice:32000,soldCount:18,soldout:false},
+{id:12,code:'P012',name:'비타민D 2000IU',price:25000,discountRate:0,image:'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=200',stock:190,cart:20,sold:35,cancel:2,limited:false,limitedStatus:null,store:false,soldPrice:25000,soldCount:35,soldout:false},
+{id:13,code:'P013',name:'종합비타민 멀티팩',price:55000,discountRate:0,image:'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=200',stock:110,cart:17,sold:28,cancel:1,limited:false,limitedStatus:null,store:false,soldPrice:55000,soldCount:28,soldout:false},
+{id:14,code:'P014',name:'아르기닌 5000mg',price:48000,discountRate:0,image:null,stock:95,cart:13,sold:21,cancel:0,limited:false,limitedStatus:null,store:false,soldPrice:48000,soldCount:21,soldout:false},
+{id:15,code:'P015',name:'글루타민 파우더',price:38000,discountRate:0,image:'https://images.unsplash.com/photo-1606312619070-d48b4cda2f97?w=200',stock:125,cart:12,sold:19,cancel:1,limited:false,limitedStatus:null,store:false,soldPrice:38000,soldCount:19,soldout:false},
+{id:16,code:'P016',name:'BCAA 에너지 부스트',price:62000,discountRate:0,image:'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=200',stock:85,cart:21,sold:33,cancel:0,limited:false,limitedStatus:null,store:false,soldPrice:62000,soldCount:33,soldout:false},
+{id:17,code:'P017',name:'크레아틴 모노하이드레이트',price:35000,discountRate:0,image:null,stock:105,cart:9,sold:16,cancel:0,limited:false,limitedStatus:null,store:false,soldPrice:35000,soldCount:16,soldout:false},
+{id:18,code:'P018',name:'시트룰린 말레이트',price:42000,discountRate:0,image:'https://images.unsplash.com/photo-1556742400-b5d6e8fa01c0?w=200',stock:115,cart:14,sold:23,cancel:1,limited:false,limitedStatus:null,store:false,soldPrice:42000,soldCount:23,soldout:false},
+{id:19,code:'P019',name:'베타알라닌 파우더',price:33000,discountRate:0,image:'https://images.unsplash.com/photo-1606312619070-d48b4cda2f97?w=200',stock:135,cart:10,sold:17,cancel:0,limited:false,limitedStatus:null,store:false,soldPrice:33000,soldCount:17,soldout:false},
+{id:20,code:'P020',name:'카르니틴 액상 20포',price:58000,discountRate:0,image:null,stock:75,cart:24,sold:40,cancel:2,limited:false,limitedStatus:null,store:false,soldPrice:58000,soldCount:40,soldout:false}
+];
+
+let registeredProducts=[
+{id:101,code:'R001',name:'헬스 단백질 쉐이크',price:35000,image:null},
+{id:102,code:'R002',name:'다이어트 식이섬유',price:28000,image:null},
+{id:103,code:'R003',name:'MCT 오일 500ml',price:42000,image:null},
+{id:104,code:'R004',name:'코엔자임 Q10 고함량',price:68000,image:'https://images.unsplash.com/photo-1556742400-b5d6e8fa01c0?w=200'},
+{id:105,code:'R005',name:'NAC 간 해독 캡슐',price:52000,image:'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=200'},
+{id:106,code:'R006',name:'아사이베리 파우더',price:45000,image:null},
+{id:107,code:'R007',name:'스피루리나 정제',price:38000,image:null},
+{id:108,code:'R008',name:'클로렐라 파우더',price:32000,image:'https://images.unsplash.com/photo-1556742400-b5d6e8fa01c0?w=200'},
+{id:109,code:'R009',name:'마카 파우더',price:48000,image:null},
+{id:110,code:'R010',name:'로얄젤리 캡슐',price:55000,image:'https://images.unsplash.com/photo-1606312619070-d48b4cda2f97?w=200'},
+{id:111,code:'R011',name:'프로폴리스 스프레이',price:28000,image:null},
+{id:112,code:'R012',name:'석류 콜라겐',price:62000,image:'https://images.unsplash.com/photo-1556742400-b5d6e8fa01c0?w=200'},
+{id:113,code:'R013',name:'히알루론산 세럼',price:72000,image:null},
+{id:114,code:'R014',name:'바이오틴 포르테',price:35000,image:'https://images.unsplash.com/photo-1606312619070-d48b4cda2f97?w=200'},
+{id:115,code:'R015',name:'아연 마그네슘',price:29000,image:null},
+{id:116,code:'R016',name:'셀레늄 고함량',price:42000,image:null},
+{id:117,code:'R017',name:'크롬 피콜리네이트',price:38000,image:'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=200'},
+{id:118,code:'R018',name:'망간 복합체',price:32000,image:null},
+{id:119,code:'R019',name:'몰리브덴 캡슐',price:45000,image:'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=200'},
+{id:120,code:'R020',name:'붕소 영양제',price:28000,image:null},
+{id:121,code:'R021',name:'실리카 복합체',price:52000,image:'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=200'},
+{id:122,code:'R022',name:'구리 미네랄',price:35000,image:null},
+{id:123,code:'R023',name:'요오드 켈프',price:28000,image:null},
+{id:124,code:'R024',name:'칼륨 복합제',price:38000,image:'https://images.unsplash.com/photo-1556742400-b5d6e8fa01c0?w=200'},
+{id:125,code:'R025',name:'인산 칼슘',price:42000,image:null},
+{id:126,code:'R026',name:'황 MSM',price:48000,image:'https://images.unsplash.com/photo-1606312619070-d48b4cda2f97?w=200'},
+{id:127,code:'R027',name:'염소 미네랄',price:32000,image:null},
+{id:128,code:'R028',name:'나트륨 전해질',price:28000,image:null},
+{id:129,code:'R029',name:'바나듐 복합제',price:55000,image:'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=200'},
+{id:130,code:'R030',name:'게르마늄 캡슐',price:68000,image:null}
+];
+
+let mutedUsers=new Set(['테스트유저1','테스트유저2']);
+let currentMemo='';
+let chatMessages=[
+{id:1,user:'행복한구매자',message:'오 이거 좋아보여요!',time:Date.now()},
+{id:2,user:'건강지킴이',message:'가격 얼마예요?',time:Date.now()},
+{id:3,user:'프로틴러버',message:'프로틴 파우더 재구매합니다',time:Date.now()}
+];
+let inquiries=[
+{id:1,name:'홍길동',msg:'교환 문의',status:'wait',phone:'010-1234-****',item:'에너지바',memo:''},
+{id:2,name:'이순신',msg:'배송 문의',status:'done',phone:'010-5555-****',item:'프로틴',memo:''}
+];
+let currentInquiry=1;
+let chart=null;
+let chartLabels=[];
+let chartViewers=[];
+let chartSales=[];
+let chartOrders=[];
+let recentSalesProducts=[];
+let salesByTime={};
+
+setInterval(()=>{
+time++;
+const h=Math.floor(time/3600);
+const m=Math.floor((time%3600)/60);
+const s=time%60;
+const timeStr=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+document.getElementById('liveTime').textContent=`🕐 ${timeStr}`;
+document.getElementById('stat-liveTime-value').textContent=timeStr;
+if(document.getElementById('dash-liveTime')){
+document.getElementById('dash-liveTime').textContent=timeStr;
+}
+stats.currentViewers=Math.max(800,stats.currentViewers+Math.floor(Math.random()*20-8));
+stats.totalViewers+=Math.floor(Math.random()*5);
+stats.likes+=Math.floor(Math.random()*3);
+if(Math.random()>0.95){
+stats.orderCount++;
+const rp=products[Math.floor(Math.random()*products.length)];
+stats.totalSales+=rp.soldPrice;
+rp.soldCount++;
+recentSalesProducts.unshift({...rp,soldAt:Date.now()});
+if(recentSalesProducts.length>10)recentSalesProducts.pop();
+
+const min=Math.floor(time/60);
+const chartIdx=chartLabels.length-1;
+if(chartIdx>=0){
+if(!salesByTime[chartIdx])salesByTime[chartIdx]=[];
+salesByTime[chartIdx].push({...rp,soldAt:Date.now()});
+}
+updateSalesMarkers();
+}
+updateStats();
+if(time%60===0)updateChart();
+if(Math.random()>0.7)addRandomChat();
+if(Math.random()>0.8)addHeart();
+},1000);
+
+function updateStats(){
+document.getElementById('currentViewers').textContent=stats.currentViewers.toLocaleString();
+document.getElementById('totalViewers').textContent=stats.totalViewers.toLocaleString();
+document.getElementById('likes').textContent=stats.likes.toLocaleString();
+document.getElementById('orderCount').textContent=stats.orderCount;
+document.getElementById('totalSales').textContent='₩'+stats.totalSales.toLocaleString();
+document.getElementById('mobileViewers').textContent=stats.currentViewers.toLocaleString();
+}
+
+function renderStatsGrid(){
+const grid=document.getElementById('statsGrid');
+grid.innerHTML='';
+grid.style.gridTemplateColumns=`repeat(${selectedMetrics.length+1},1fr)`;
+
+selectedMetrics.forEach(metricId=>{
+const metric=allMetrics.find(m=>m.id===metricId);
+if(!metric)return;
+
+const colorMap={
+cyan:'cyan',indigo:'indigo',purple:'purple',blue:'blue',teal:'teal',
+pink:'pink',yellow:'yellow',lime:'lime',rose:'rose',amber:'amber',
+green:'green',emerald:'emerald',sky:'sky',red:'red',orange:'orange'
+};
+
+const colorClass=colorMap[metric.color]||'indigo';
+
+const el=document.createElement('div');
+el.id=`stat-${metric.id}`;
+el.className='bg-slate-900/50 backdrop-blur-lg rounded-xl p-4 border border-slate-800';
+el.innerHTML=`
+<div class="flex items-center gap-2 text-slate-400 mb-2 text-sm">${metric.icon} ${metric.name}</div>
+<div class="text-3xl font-bold text-${colorClass}-400" id="${metric.id}">${metric.value}</div>
+`;
+grid.appendChild(el);
+});
+
+const plusBtn=document.createElement('button');
+plusBtn.onclick=()=>showModal('statsConfig');
+plusBtn.className='bg-slate-900/50 backdrop-blur-lg rounded-xl p-4 border border-slate-800 hover:bg-slate-800/50 transition flex items-center justify-center';
+plusBtn.innerHTML='<div class="text-4xl text-slate-500">+</div>';
+grid.appendChild(plusBtn);
+}
+
+function switchTab(tab){
+document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+document.querySelectorAll('[id^="tab-"]').forEach(el=>el.classList.remove('tab-active'));
+document.getElementById('content-'+tab).classList.remove('hidden');
+document.getElementById('tab-'+tab).classList.add('tab-active');
+
+if(tab==='streaming'){
+document.getElementById('stats-section').style.display='block';
+}else{
+document.getElementById('stats-section').style.display='none';
+}
+
+if(tab==='dashboard'){
+updateDashboard();
+if(!chart)initChart();
+updateSalesMarkers();
+}else if(tab==='inquiry')renderInquiries();
+}
+
+function switchQnaTab(tab){
+document.querySelectorAll('.qna-tab').forEach(el=>el.classList.remove('active'));
+document.querySelectorAll('.qna-content').forEach(el=>el.classList.add('hidden'));
+event.target.classList.add('active');
+document.getElementById('qna-'+tab).classList.remove('hidden');
+if(tab==='liveqa')renderQnA();
+}
+
+function renderQnA(){
+const html=qnaList.map(q=>`<div class="bg-slate-800/50 rounded-lg p-3 mb-2">
+<div class="flex items-center gap-2 mb-2">
+<div class="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-xs font-bold">Q</div>
+<div class="text-xs font-bold">${q.question}</div>
+</div>
+<div class="text-xs text-slate-400 mb-1">${q.user} • ${q.time}</div>
+<div class="bg-slate-700/50 rounded p-2 text-xs">${q.answer}</div>
+</div>`).join('');
+document.getElementById('qnaList').innerHTML=html||'<div class="text-center text-slate-400 py-4 text-xs">아직 Q&A가 없습니다</div>';
+}
+
+function renderProducts(){
+const search=document.getElementById('searchInput').value.toLowerCase();
+const filtered=products.filter(p=>p.name.toLowerCase().includes(search)||p.code.toLowerCase().includes(search));
+const totalPages=Math.ceil(filtered.length/itemsPerPage);
+const startIdx=(currentPage-1)*itemsPerPage;
+const endIdx=startIdx+itemsPerPage;
+const pageProducts=filtered.slice(startIdx,endIdx);
+document.getElementById('productCount').textContent=filtered.length;
+document.getElementById('currentPage').textContent=currentPage;
+document.getElementById('totalPages').textContent=totalPages;
+
+const html=pageProducts.map(p=>{
+const finalPrice=p.price*(1-p.discountRate/100);
+const expectedRemain=p.stock-p.cart;
+const actualRemain=p.stock-p.sold;
+const productSales=p.soldCount*p.soldPrice;
+const isNew=p.id===lastFlashId;
+
+return `<div class="product-card bg-slate-800/30 border border-slate-700 rounded-lg p-3 ${isNew?'flash-highlight':''}" draggable="true" ondragstart="dragStart(event,${p.id})" ondragover="dragOver(event)" ondrop="drop(event,${p.id})" id="prod-card-${p.id}">
+<div class="flex gap-3">
+${p.image?`<img src="${p.image}" class="w-16 h-16 rounded object-cover flex-shrink-0" id="prod-img-${p.id}"/>`:`
+<div class="relative w-16 h-16 rounded bg-slate-700 flex items-center justify-center flex-shrink-0" id="prod-img-container-${p.id}">
+<button onclick="captureForProduct(${p.id})" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-[10px] font-bold transition leading-tight">📸<br/>캡처</button>
+</div>
+`}
+<div class="flex-1 min-w-0">
+<div class="flex items-start justify-between mb-1">
+<h3 class="font-semibold text-sm truncate flex-1">${p.name} <span class="text-xs text-slate-500">(${p.code})</span></h3>
+</div>
+<div class="flex items-center gap-2 mb-1">
+<div class="flex items-center gap-1">
+<span class="text-[10px] text-slate-400">한정</span>
+<div class="toggle-switch ${p.limited?'active':''}" onclick="toggleLimited(${p.id})"></div>
+</div>
+<div class="flex items-center gap-1">
+<span class="text-[10px] text-slate-400">스토어</span>
+<div class="toggle-switch ${p.store?'active':''}" onclick="toggleStore(${p.id})"></div>
+</div>
+</div>
+<div class="flex items-center gap-2 flex-wrap mb-1">
+${p.discountRate>0?`<span class="text-slate-500 line-through text-xs">₩${p.price.toLocaleString()}</span><span class="text-base font-bold text-green-400">₩${finalPrice.toLocaleString()}</span><span class="px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded font-bold">${p.discountRate}%</span>`:`<span class="text-base font-bold">₩${p.price.toLocaleString()}</span>`}
+</div>
+<div class="text-[10px] text-emerald-400 font-semibold mb-1">매출: ₩${productSales.toLocaleString()} (${p.soldCount}건)</div>
+<div class="flex items-center gap-1 mb-1 flex-wrap">
+${[10,20,30,50].map(r=>`<button onclick="applyDiscount(${p.id},${r})" class="px-2 py-0.5 rounded text-[10px] font-semibold ${p.discountRate===r?'bg-red-600 text-white':'bg-slate-700'}">${r}%</button>`).join('')}
+${p.discountRate>0?`<button onclick="applyDiscount(${p.id},0)" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-700">해제</button>`:''}
+<button onclick="showCustomDiscount(${p.id})" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-600">직접입력</button>
+</div>
+${p.limited?`<div class="flex gap-1 mb-1">
+<button onclick="setLimitedStatus(${p.id},'ready')" class="px-2 py-0.5 rounded text-[10px] font-semibold ${p.limitedStatus==='ready'?'bg-blue-600':'bg-slate-700'}">판매예정</button>
+<button onclick="setLimitedStatus(${p.id},'selling')" class="px-2 py-0.5 rounded text-[10px] font-semibold ${p.limitedStatus==='selling'?'bg-green-600':'bg-slate-700'}">판매시작</button>
+<button onclick="setLimitedStatus(${p.id},'soldout')" class="px-2 py-0.5 rounded text-[10px] font-semibold ${p.limitedStatus==='soldout'?'bg-gray-600':'bg-slate-700'}">품절</button>
+</div>`:''}<div class="grid grid-cols-6 gap-1">
+<div class="bg-slate-900/50 rounded p-1 text-center"><div class="text-[9px] text-slate-400">재고</div><div class="font-bold text-white text-xs">${p.stock}</div></div>
+<div class="bg-slate-900/50 rounded p-1 text-center"><div class="text-[9px] text-slate-400">장바구니</div><div class="font-bold text-yellow-400 text-xs">${p.cart}</div></div>
+<div class="bg-slate-900/50 rounded p-1 text-center"><div class="text-[9px] text-slate-400">실결제</div><div class="font-bold text-green-400 text-xs">${p.sold}</div></div>
+<div class="bg-slate-900/50 rounded p-1 text-center"><div class="text-[9px] text-slate-400">예상잔여</div><div class="font-bold text-blue-400 text-xs">${expectedRemain}</div></div>
+<div class="bg-slate-900/50 rounded p-1 text-center"><div class="text-[9px] text-slate-400">취소</div><div class="font-bold text-red-400 text-xs">${p.cancel}</div></div>
+<div class="bg-slate-900/50 rounded p-1 text-center"><div class="text-[9px] text-slate-400">실잔여</div><div class="font-bold text-indigo-400 text-xs">${actualRemain}</div></div>
+</div></div></div></div>`;
+}).join('');
+
+document.getElementById('productList').innerHTML=html;
+renderPagination(totalPages);
+updateStoreProducts();
+}
+
+function renderPagination(totalPages){
+let html='';
+for(let i=1;i<=Math.min(totalPages,10);i++){
+html+=`<button onclick="goToPage(${i})" class="px-2 py-1 rounded text-xs ${i===currentPage?'bg-indigo-600':'bg-slate-700'}">${i}</button>`;
+}
+document.getElementById('pagination').innerHTML=html;
+}
+
+function goToPage(page){currentPage=page;renderProducts()}
+function filterProducts(){currentPage=1;renderProducts()}
+function dragStart(e,id){draggedId=id;e.target.classList.add('dragging')}
+function dragOver(e){e.preventDefault()}
+function drop(e,targetId){
+e.preventDefault();
+if(!draggedId||draggedId===targetId){
+document.querySelectorAll('.product-card').forEach(el=>el.classList.remove('dragging'));
+return;
+}
+const dragIdx=products.findIndex(p=>p.id===draggedId);
+const targetIdx=products.findIndex(p=>p.id===targetId);
+if(dragIdx!==-1&&targetIdx!==-1){
+const [draggedItem]=products.splice(dragIdx,1);
+products.splice(targetIdx,0,draggedItem);
+}
+document.querySelectorAll('.product-card').forEach(el=>el.classList.remove('dragging'));
+draggedId=null;
+renderProducts();
+}
+
+function applyDiscount(id,rate){
+const p=products.find(x=>x.id===id);
+p.discountRate=rate;
+renderProducts();
+updateStoreProducts();
+updateProductCTA();
+}
+
+function toggleLimited(id){
+const p=products.find(x=>x.id===id);
+if(!p.limited){
+products.forEach(x=>{x.limited=false;x.limitedStatus=null});
+p.limited=true;
+p.store=false;
+p.limitedStatus='ready';
+}else{
+p.limited=false;
+p.limitedStatus=null;
+}
+renderProducts();
+updateProductCTA();
+}
+
+function toggleStore(id){
+const p=products.find(x=>x.id===id);
+p.store=!p.store;
+if(p.store){
+p.limited=false;
+p.limitedStatus=null;
+}
+renderProducts();
+updateStoreProducts();
+}
+
+function setLimitedStatus(id,status){
+const p=products.find(x=>x.id===id);
+p.limitedStatus=status;
+if(status==='soldout')p.soldout=true;
+renderProducts();
+updateProductCTA();
+}
+
+function showCustomDiscount(id){
+const p=products.find(x=>x.id===id);
+const modal=`<div class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick="closeModal()">
+<div class="bg-slate-900 rounded-2xl border border-slate-700 p-6 max-w-md w-full" onclick="event.stopPropagation()">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-2xl font-bold">할인 직접 입력</h3>
+<button onclick="closeModal()" class="p-2 hover:bg-slate-800 rounded-lg">✖️</button>
+</div>
+<div class="space-y-4">
+<div>
+<label class="block text-sm font-semibold mb-2">할인율 (%)</label>
+<input type="number" id="customDiscountRate" min="0" max="100" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl" placeholder="0"/>
+</div>
+<div>
+<label class="block text-sm font-semibold mb-2">할인가 (원)</label>
+<input type="number" id="customDiscountPrice" min="0" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl" placeholder="${p.price}"/>
+</div>
+<div class="text-sm text-slate-400">원가: ₩${p.price.toLocaleString()}</div>
+<button onclick="applyCustomDiscount(${id})" class="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-xl font-semibold">적용하기</button>
+</div></div></div>`;
+document.getElementById('modalContainer').innerHTML=modal;
+}
+
+function applyCustomDiscount(id){
+const rate=parseInt(document.getElementById('customDiscountRate').value)||0;
+const price=parseInt(document.getElementById('customDiscountPrice').value);
+const p=products.find(x=>x.id===id);
+if(!p)return;
+if(rate>0){
+p.discountRate=Math.min(100,Math.max(0,rate));
+}else if(price&&price<p.price){
+p.discountRate=Math.round((1-price/p.price)*100);
+}
+closeModal();
+renderProducts();
+updateStoreProducts();
+updateProductCTA();
+}
+
+function updateProductCTA(){
+const limitedProduct=products.find(p=>p.limited&&p.limitedStatus);
+const container=document.getElementById('productCTA');
+if(!limitedProduct){
+container.innerHTML='';
+adjustChatPosition();
+return;
+}
+const finalPrice=limitedProduct.price*(1-limitedProduct.discountRate/100);
+let buttonClass='',buttonText='',disabled='';
+if(limitedProduct.limitedStatus==='ready'){
+buttonClass='bg-blue-600';
+buttonText='판매예정';
+disabled='opacity-50';
+}else if(limitedProduct.limitedStatus==='selling'){
+buttonClass='bg-green-600';
+buttonText='주문하기';
+}else{
+buttonClass='bg-gray-600';
+buttonText='품절';
+disabled='opacity-50';
+}
+container.innerHTML=`<div class="bg-white text-black rounded-xl p-3 shadow-2xl">
+<div class="flex gap-3">
+${limitedProduct.image?`<img src="${limitedProduct.image}" class="w-16 h-16 rounded-lg object-cover"/>`:`<div class="w-16 h-16 bg-slate-300 rounded-lg flex items-center justify-center text-xs">이미지<br/>없음</div>`}
+<div class="flex-1">
+<div class="font-bold text-sm mb-1">${limitedProduct.name}</div>
+<div class="flex items-center gap-2">
+${limitedProduct.discountRate>0?`<span class="text-gray-500 line-through text-xs">₩${limitedProduct.price.toLocaleString()}</span><span class="text-xl font-bold text-red-600">₩${finalPrice.toLocaleString()}</span><span class="bg-red-600 text-white text-xs px-2 py-0.5 rounded font-bold">${limitedProduct.discountRate}%</span>`:`<span class="text-xl font-bold text-green-600">₩${finalPrice.toLocaleString()}</span>`}
+</div></div></div>
+<button class="${buttonClass} ${disabled} w-full mt-2 py-2 rounded-lg font-bold text-white text-sm">${buttonText}</button>
+</div>`;
+adjustChatPosition();
+}
+
+function adjustChatPosition(){
+const chatContainer=document.getElementById('chatContainer');
+const hasProductCTA=products.some(p=>p.limited&&p.limitedStatus);
+chatContainer.style.bottom=hasProductCTA?'200px':'60px';
+}
+
+function updateStoreProducts(){
+const storeProducts=products.filter(p=>p.store);
+const container=document.getElementById('storeProductList');
+if(storeProducts.length===0){
+container.innerHTML='<div class="text-center text-slate-400 py-8">스토어에 등록된 상품이 없습니다</div>';
+return;
+}
+container.innerHTML=storeProducts.map(p=>{
+const finalPrice=p.price*(1-p.discountRate/100);
+return `<div class="flex gap-3 p-3 bg-slate-800/50 rounded-xl">
+${p.image?`<img src="${p.image}" class="w-20 h-20 rounded-lg object-cover"/>`:`<div class="w-20 h-20 bg-slate-700 rounded-lg flex items-center justify-center text-xs text-slate-500">이미지<br/>없음</div>`}
+<div class="flex-1">
+<div class="font-semibold mb-1">${p.name}</div>
+${p.discountRate>0?`<div class="flex items-center gap-2 mb-1">
+<span class="text-sm text-slate-400 line-through">₩${p.price.toLocaleString()}</span>
+<span class="text-xl font-bold text-red-500">₩${finalPrice.toLocaleString()}</span>
+<span class="px-2 py-0.5 bg-red-500 text-white text-xs rounded font-bold">${p.discountRate}%</span>
+</div>
+<div class="text-xs text-red-400">지금 ₩${(p.price-finalPrice).toLocaleString()}원 할인 중!</div>`:`<div class="text-lg font-bold text-green-400">₩${p.price.toLocaleString()}</div>`}
+</div></div>`;
+}).join('');
+}
+
+function changeChatSize(){
+chatSize++;
+if(chatSize>5)chatSize=1;
+document.getElementById('chatSizeIndicator').textContent=chatSize;
+renderChat();
+}
+
+function sendSellerChat(){
+const input=document.getElementById('chatInputBox');
+if(!input.value.trim())return;
+const newMsg={id:Date.now(),user:'치즈애나',message:input.value,time:Date.now()};
+chatMessages.push(newMsg);
+if(chatMessages.length>20)chatMessages.shift();
+input.value='';
+renderChat();
+}
+
+function addRandomChat(){
+const messages=['이거 진짜 좋아요!','주문했어요~','재구매합니다','효과 좋네요','추천해요'];
+const users=['건강맨','운동러버','다이어터','헬스매니아','영양왕'];
+const newMsg={id:Date.now(),user:users[Math.floor(Math.random()*users.length)],message:messages[Math.floor(Math.random()*messages.length)],time:Date.now()};
+chatMessages.push(newMsg);
+if(chatMessages.length>20)chatMessages.shift();
+renderChat();
+}
+
+function renderChat(){
+const visibleMessages=chatMessages.filter(msg=>!mutedUsers.has(msg.user)).slice(-15);
+const html=visibleMessages.map(msg=>`<div class="chat-message chat-size-${chatSize} bg-slate-700 hover:bg-slate-600 cursor-pointer transition" onclick="showUserMenu('${msg.user}',event)">
+<span class="font-bold text-indigo-400">${msg.user}</span>
+<span class="text-white ml-2">${msg.message}</span>
+</div>`).join('');
+document.getElementById('chatManager').innerHTML=html;
+const container=document.getElementById('chatContainer');
+container.innerHTML=visibleMessages.slice(-7).map(msg=>`<div class="chat-fade-in mb-1 bg-black/40 backdrop-blur-sm rounded px-2 py-1">
+<span class="text-[11px] font-bold text-indigo-400">${msg.user}</span>
+<span class="text-[11px] text-white ml-2">${msg.message}</span>
+</div>`).join('');
+}
+
+function showUserMenu(username,event){
+event.stopPropagation();
+if(mutedUsers.has(username))return;
+closeUserMenu();
+const rect=event.currentTarget.getBoundingClientRect();
+const menu=document.createElement('div');
+menu.className='fixed bg-slate-900 border border-slate-700 rounded-lg shadow-xl p-2 z-50';
+menu.style.left=rect.left+'px';
+menu.style.top=rect.bottom+5+'px';
+menu.innerHTML=`<button onclick="muteUser('${username}','permanent');closeUserMenu();" class="w-full px-4 py-2 text-left hover:bg-slate-800 rounded text-sm whitespace-nowrap">방송 끝까지 음소거</button>
+<button onclick="muteUser('${username}',5);closeUserMenu();" class="w-full px-4 py-2 text-left hover:bg-slate-800 rounded text-sm whitespace-nowrap">5분 음소거</button>
+<button onclick="replyUser('${username}');closeUserMenu();" class="w-full px-4 py-2 text-left hover:bg-slate-800 rounded text-sm whitespace-nowrap">답변하기</button>`;
+menu.onclick=(e)=>e.stopPropagation();
+document.body.appendChild(menu);
+menu.id='userMenu';
+setTimeout(()=>document.addEventListener('click',closeUserMenu),10);
+}
+
+function closeUserMenu(){
+const menu=document.getElementById('userMenu');
+if(menu){
+menu.remove();
+document.removeEventListener('click',closeUserMenu);
+}
+}
+
+function muteUser(username,duration){
+mutedUsers.add(username);
+if(duration===5){
+setTimeout(()=>{
+mutedUsers.delete(username);
+renderChat();
+},5*60*1000);
+}
+renderChat();
+alert(`${username}님이 음소거되었습니다.`);
+}
+
+function replyUser(username){
+const answer=prompt(`${username}님에게 답변:`);
+if(!answer)return;
+qnaList.push({
+id:Date.now(),
+user:username,
+question:chatMessages.find(m=>m.user===username)?.message||'질문',
+answer:answer,
+time:new Date().toLocaleString('ko-KR')
+});
+renderQnA();
+alert('답변이 LIVE Q&A에 등록되었습니다!');
+}
+
+function addHeart(){
+const container=document.getElementById('heartsContainer');
+const heart=document.createElement('div');
+heart.className='heart-animation absolute bottom-4';
+heart.style.left=`${Math.random()*80+10}%`;
+heart.innerHTML='❤️';
+heart.style.fontSize='24px';
+container.appendChild(heart);
+setTimeout(()=>heart.remove(),2000);
+}
+
+function showModal(type){
+let modal='';
+if(type==='statsConfig'){
+const checkedMetrics=new Set(selectedMetrics);
+const categories={
+'traffic':{ name:'방송 운영 및 트래픽', metrics:['liveTime','currentViewers','totalViewers','viewerRetention','newUserRate']},
+'engagement':{name:'참여 및 커뮤니티', metrics:['likes','follows','followRate','donations','donationRate']},
+'sales':{name:'실시간 매출 및 주문', metrics:['totalSales','realSales','orderCount','orderUsers','cancelCount','cartCount']},
+'conversion':{name:'전환 상태 및 효율', metrics:['stockConversion','cartConversion','unconvertedCart','avgCartAmount','avgOrderAmount','cancelRate']}
+};
+modal=`<div class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick="closeModal()">
+<div class="bg-slate-900 rounded-2xl border border-slate-700 p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-2xl font-bold">보고 싶은 지표를 선택해주세요. <span class="text-base text-indigo-400" id="metricCounter">(선택됨: ${checkedMetrics.size}/6)</span></h3>
+<button onclick="closeModal()" class="p-2 hover:bg-slate-800 rounded-lg">✖️</button>
+</div>
+
+${Object.keys(categories).map(catKey=>{
+const cat=categories[catKey];
+return `<div class="mb-6">
+<h4 class="text-lg font-bold text-indigo-400 mb-3">${cat.name}</h4>
+<div class="grid grid-cols-3 gap-3">
+${cat.metrics.map(mId=>{
+const m=allMetrics.find(x=>x.id===mId);
+if(!m)return '';
+return `<label class="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition ${!checkedMetrics.has(m.id)&&checkedMetrics.size>=6?'opacity-50 cursor-not-allowed':''}">
+<input type="checkbox" class="w-5 h-5 metric-check" data-id="${m.id}" ${checkedMetrics.has(m.id)?'checked':''} ${!checkedMetrics.has(m.id)&&checkedMetrics.size>=6?'disabled':''} onchange="updateMetricSelection()"/>
+<div class="flex-1">
+<div class="font-semibold text-sm">${m.icon} ${m.name}</div>
+</div>
+</label>`;
+}).join('')}
+</div></div>`;
+}).join('')}
+
+<div class="flex gap-3 mt-6">
+<button onclick="closeModal()" class="flex-1 px-4 py-3 bg-slate-700 rounded-xl font-semibold">취소</button>
+<button id="saveMetricsBtn" onclick="saveMetrics()" class="flex-1 px-4 py-3 bg-indigo-600 rounded-xl font-semibold ${checkedMetrics.size===0?'opacity-50 cursor-not-allowed':''}">저장</button>
+</div>
+</div></div>`;
+}else if(type==='registered'){
+modal=`<div class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick="closeModal()">
+<div class="bg-slate-900 rounded-2xl border border-slate-700 p-6 max-w-4xl w-full max-h-[85vh] flex flex-col" onclick="event.stopPropagation()">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-2xl font-bold">등록된 상품 <span class="text-base text-slate-400">(<span id="selectedCount">0</span>개 선택)</span></h3>
+<button onclick="closeModal()" class="p-2 hover:bg-slate-800 rounded-lg">✖️</button>
+</div>
+
+<!-- 검색창 -->
+<div class="mb-4">
+<div class="relative">
+<input type="text" id="registeredSearchInput" placeholder="상품명 또는 상품코드로 검색..." class="w-full pl-10 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:border-indigo-500 focus:outline-none" onkeyup="filterRegisteredProducts()"/>
+<span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+</div>
+</div>
+
+<!-- 상품 리스트 (스크롤) -->
+<div class="flex-1 overflow-y-auto mb-4 pr-2" style="max-height:450px" id="registeredProductList">
+<div class="grid grid-cols-2 gap-3">
+${registeredProducts.map(p=>`<label class="flex gap-3 p-3 bg-slate-800/50 rounded-xl cursor-pointer hover:bg-slate-800 transition border-2 border-transparent registered-product-item" data-id="${p.id}" data-name="${p.name}" data-code="${p.code}" id="product-${p.id}">
+<input type="checkbox" class="w-5 h-5 accent-indigo-600 registered-checkbox" value="${p.id}" onchange="updateSelectedCount()"/>
+<div class="relative w-20 h-20 flex-shrink-0">
+${p.image?`<img src="${p.image}" class="w-full h-full rounded-lg object-cover" id="img-${p.id}"/>`:`
+<div class="w-full h-full bg-slate-700 rounded-lg flex items-center justify-center text-xs text-slate-500" id="img-container-${p.id}">
+이미지<br/>없음
+</div>
+`}
+</div>
+<div class="flex-1">
+<div class="font-semibold mb-1 text-sm">${p.name}</div>
+<div class="text-xs text-slate-400 mb-1">${p.code}</div>
+<div class="text-base font-bold text-green-400">₩${p.price.toLocaleString()}</div>
+</div>
+</label>`).join('')}
+</div>
+</div>
+
+<!-- 하단 버튼 -->
+<div class="flex gap-3 pt-4 border-t border-slate-700">
+<button onclick="closeModal()" class="flex-1 px-4 py-3 bg-slate-700 rounded-xl font-semibold">취소</button>
+<button onclick="addSelectedProducts()" id="addProductsBtn" class="flex-1 px-4 py-3 bg-indigo-600 rounded-xl font-semibold" disabled>선택한 상품 추가하기</button>
+</div>
+</div></div>`;
+document.getElementById('modalContainer').innerHTML=modal;
+setTimeout(()=>{
+updateSelectedCount();
+},100);
+}else if(type==='flash'){
+modal=`<div class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick="closeModal()">
+<div class="bg-slate-900 rounded-2xl border border-slate-700 p-6 max-w-lg w-full" onclick="event.stopPropagation()">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-2xl font-bold">플래시 상품 등록</h3>
+<button onclick="closeModal()" class="p-2 hover:bg-slate-800 rounded-lg">✖️</button>
+</div>
+<div class="space-y-4">
+<div><label class="block text-sm font-semibold mb-2">상품정보</label><input type="text" id="flashName" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl" placeholder="상품명"/></div>
+<div><label class="block text-sm font-semibold mb-2">라이브가</label><input type="number" id="flashPrice" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl" placeholder="0"/></div>
+<div><label class="block text-sm font-semibold mb-2">상품수량</label><input type="number" id="flashStock" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl" placeholder="0"/></div>
+<div class="flex gap-3">
+<button onclick="closeModal()" class="flex-1 px-4 py-3 bg-slate-700 rounded-xl font-semibold">취소</button>
+<button onclick="registerFlash()" class="flex-1 px-4 py-3 bg-purple-600 rounded-xl font-semibold">등록하기</button>
+</div></div></div></div>`;
+}else if(type==='autoRepeat'){
+modal=`<div class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick="closeModal()">
+<div class="bg-slate-900 rounded-2xl border border-slate-700 p-6 max-w-lg w-full" onclick="event.stopPropagation()">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-2xl font-bold">자동반복 설정</h3>
+<button onclick="closeModal()" class="p-2 hover:bg-slate-800 rounded-lg">✖️</button>
+</div>
+<div class="space-y-4">
+<div class="flex gap-2">
+<button onclick="setAutoRepeat(30)" id="autoBtn30" class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition">30초</button>
+<button onclick="setAutoRepeat(60)" id="autoBtn60" class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition">1분</button>
+<button onclick="setAutoRepeat(180)" id="autoBtn180" class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition">3분</button>
+<button onclick="setAutoRepeat(300)" id="autoBtn300" class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition">5분</button>
+</div>
+<div><label class="block text-sm font-semibold mb-2">직접입력 (초)</label><input type="number" id="customRepeatSec" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl" placeholder="0"/></div>
+<div><label class="block text-sm font-semibold mb-2">반복 메시지</label><textarea id="repeatMsg" class="w-full h-24 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl resize-none" placeholder="자동으로 반복될 메시지를 입력하세요"></textarea></div>
+<div class="flex gap-3">
+<button onclick="stopAutoRepeat()" class="flex-1 px-4 py-3 bg-red-600 rounded-xl font-semibold">중지</button>
+<button onclick="startAutoRepeat()" class="flex-1 px-4 py-3 bg-indigo-600 rounded-xl font-semibold">시작</button>
+</div></div></div></div>`;
+}else if(type==='chatManagement'){
+const list=Array.from(mutedUsers).map(u=>`<div class="flex justify-between items-center p-4 bg-slate-800/50 rounded-xl">
+<div><div class="font-semibold">${u}</div><div class="text-sm text-red-400">음소거됨</div></div>
+<button onclick="unmute('${u}')" class="px-4 py-2 bg-emerald-600 rounded-lg font-semibold">해제</button>
+</div>`).join('')||'<div class="text-center text-slate-400 py-8">음소거된 유저가 없습니다</div>';
+modal=`<div class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick="closeModal()">
+<div class="bg-slate-900 rounded-2xl border border-slate-700 p-6 max-w-2xl w-full" onclick="event.stopPropagation()">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-2xl font-bold">채팅 관리 (음소거된 유저)</h3>
+<button onclick="closeModal()" class="p-2 hover:bg-slate-800 rounded-lg">✖️</button>
+</div>
+<div class="space-y-3">${list}</div>
+</div></div>`;
+}else if(type==='memo'){
+modal=`<div class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick="closeModal()">
+<div class="bg-slate-900 rounded-2xl border border-slate-700 p-6 max-w-lg w-full" onclick="event.stopPropagation()">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-2xl font-bold">메모 작성</h3>
+<button onclick="closeModal()" class="p-2 hover:bg-slate-800 rounded-lg">✖️</button>
+</div>
+<textarea id="memoInput" class="w-full h-32 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl resize-none mb-2" maxlength="500">${currentMemo}</textarea>
+<div class="text-xs text-slate-400 mb-6 text-right"><span id="memoLen">0</span>/500자</div>
+<div class="flex gap-3">
+<button onclick="clearMemo()" class="flex-1 px-4 py-3 bg-red-600 rounded-xl font-semibold">삭제</button>
+<button onclick="saveMemo()" class="flex-1 px-4 py-3 bg-indigo-600 rounded-xl font-semibold">표시</button>
+</div></div></div>`;
+setTimeout(()=>{
+const input=document.getElementById('memoInput');
+input.addEventListener('input',()=>{
+document.getElementById('memoLen').textContent=input.value.length;
+});
+document.getElementById('memoLen').textContent=currentMemo.length;
+},100);
+}
+document.getElementById('modalContainer').innerHTML=modal;
+}
+
+function updateMetricSelection(){
+const checks=document.querySelectorAll('.metric-check');
+const selected=Array.from(checks).filter(c=>c.checked).map(c=>c.dataset.id);
+const counter=document.getElementById('metricCounter');
+counter.textContent=`(선택됨: ${selected.length}/6)`;
+
+checks.forEach(c=>{
+if(!c.checked&&selected.length>=6){
+c.disabled=true;
+c.parentElement.classList.add('opacity-50','cursor-not-allowed');
+}else if(!c.checked){
+c.disabled=false;
+c.parentElement.classList.remove('opacity-50','cursor-not-allowed');
+}
+});
+
+const saveBtn=document.getElementById('saveMetricsBtn');
+if(selected.length===0){
+saveBtn.classList.add('opacity-50','cursor-not-allowed');
+saveBtn.disabled=true;
+}else{
+saveBtn.classList.remove('opacity-50','cursor-not-allowed');
+saveBtn.disabled=false;
+}
+}
+
+function saveMetrics(){
+const checks=document.querySelectorAll('.metric-check');
+selectedMetrics=Array.from(checks).filter(c=>c.checked).map(c=>c.dataset.id);
+if(selectedMetrics.length===0)return;
+renderStatsGrid();
+closeModal();
+alert('지표 설정이 저장되었습니다!');
+}
+
+function addRegisteredProduct(id){
+const rp=registeredProducts.find(p=>p.id===id);
+if(!rp)return;
+const newId=Math.max(...products.map(p=>p.id))+1;
+products.unshift({
+id:newId,
+code:rp.code,
+name:rp.name,
+price:rp.price,
+discountRate:0,
+image:rp.image,
+stock:100,
+cart:0,
+sold:0,
+cancel:0,
+limited:false,
+limitedStatus:null,
+store:false,
+soldPrice:rp.price,
+soldCount:0,
+soldout:false
+});
+closeModal();
+currentPage=1;
+renderProducts();
+alert('상품이 추가되었습니다!');
+}
+
+function filterRegisteredProducts(){
+const searchTerm=document.getElementById('registeredSearchInput').value.toLowerCase();
+const items=document.querySelectorAll('.registered-product-item');
+items.forEach(item=>{
+const name=item.dataset.name.toLowerCase();
+const code=item.dataset.code.toLowerCase();
+if(name.includes(searchTerm)||code.includes(searchTerm)){
+item.style.display='flex';
+}else{
+item.style.display='none';
+}
+});
+}
+
+function updateSelectedCount(){
+const checkboxes=document.querySelectorAll('.registered-checkbox:checked');
+const count=checkboxes.length;
+const counter=document.getElementById('selectedCount');
+const btn=document.getElementById('addProductsBtn');
+if(counter)counter.textContent=count;
+if(btn){
+if(count>0){
+btn.disabled=false;
+btn.classList.remove('opacity-50','cursor-not-allowed');
+}else{
+btn.disabled=true;
+btn.classList.add('opacity-50','cursor-not-allowed');
+}
+}
+}
+
+function captureLiveScreen(productId){
+const mobileScreen=document.getElementById('mobileScreen');
+
+// 방송 화면 캡처
+const canvas=document.createElement('canvas');
+const ctx=canvas.getContext('2d');
+
+// 캔버스 크기 설정
+canvas.width=300;
+canvas.height=533; // 9:16 비율
+
+if(mobileScreen){
+const rect=mobileScreen.getBoundingClientRect();
+canvas.width=rect.width||300;
+canvas.height=rect.height||533;
+
+const bgImage=mobileScreen.querySelector('img');
+if(bgImage&&bgImage.complete){
+try{
+ctx.drawImage(bgImage,0,0,canvas.width,canvas.height);
+}catch(e){
+createDummyCapture(ctx,canvas);
+}
+}else{
+createDummyCapture(ctx,canvas);
+}
+}else{
+createDummyCapture(ctx,canvas);
+}
+
+const capturedImage=canvas.toDataURL('image/jpeg',0.9);
+
+// UI 업데이트: 미리보기 + 취소/적용 버튼
+const imgContainer=document.getElementById('img-container-'+productId);
+if(imgContainer){
+imgContainer.innerHTML=`
+<img src="${capturedImage}" class="w-full h-full rounded-lg object-cover absolute inset-0" id="preview-${productId}"/>
+<div class="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-1 z-10">
+<button onclick="applyCapturedImage(${productId},'${capturedImage}');event.preventDefault();event.stopPropagation();" class="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs font-bold transition text-white">✓ 적용</button>
+<button onclick="resetCaptureUI(${productId});event.preventDefault();event.stopPropagation();" class="px-3 py-1 bg-slate-600 hover:bg-slate-700 rounded text-xs font-semibold transition text-white">✕ 취소</button>
+</div>
+`;
+}
+}
+
+function applyCapturedImage(productId,capturedImage){
+// 이미지 확정
+const imgContainer=document.getElementById('img-container-'+productId);
+if(imgContainer){
+imgContainer.innerHTML=`
+<img src="${capturedImage}" class="w-full h-full rounded-lg object-cover"/>
+<div class="absolute top-1 right-1 bg-green-500 rounded-full p-1">
+<svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
+</div>
+`;
+}
+
+// registeredProducts 배열 업데이트
+const product=registeredProducts.find(p=>p.id===productId);
+if(product){
+product.image=capturedImage;
+product.imageCaptured=true;
+}
+
+// 체크박스 자동 선택
+const checkbox=document.querySelector(`.registered-checkbox[value="${productId}"]`);
+if(checkbox&&!checkbox.checked){
+checkbox.checked=true;
+updateSelectedCount();
+}
+}
+
+function resetCaptureUI(productId){
+// 초기 상태로 복귀
+const imgContainer=document.getElementById('img-container-'+productId);
+if(imgContainer){
+imgContainer.innerHTML=`
+<button onclick="captureLiveScreen(${productId});event.preventDefault();event.stopPropagation();" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-xs font-semibold transition">📸 캡처</button>
+`;
+}
+}
+
+function captureForProduct(productId){
+const mobileScreen=document.getElementById('mobileScreen');
+
+// 방송 화면 캡처
+const canvas=document.createElement('canvas');
+const ctx=canvas.getContext('2d');
+
+// 캔버스 크기 설정
+canvas.width=300;
+canvas.height=533; // 9:16 비율
+
+if(mobileScreen){
+const rect=mobileScreen.getBoundingClientRect();
+canvas.width=rect.width||300;
+canvas.height=rect.height||533;
+
+const bgImage=mobileScreen.querySelector('img');
+if(bgImage&&bgImage.complete){
+try{
+ctx.drawImage(bgImage,0,0,canvas.width,canvas.height);
+}catch(e){
+// CORS 에러 등으로 실패하면 더미 이미지 생성
+createDummyCapture(ctx,canvas);
+}
+}else{
+createDummyCapture(ctx,canvas);
+}
+}else{
+// 방송 화면을 찾을 수 없으면 더미 이미지 생성
+createDummyCapture(ctx,canvas);
+}
+
+const capturedImage=canvas.toDataURL('image/jpeg',0.9);
+
+// UI 업데이트: 미리보기 + 취소/적용 버튼
+const imgContainer=document.getElementById('prod-img-container-'+productId);
+if(imgContainer){
+imgContainer.innerHTML=`
+<img src="${capturedImage}" class="w-full h-full rounded object-cover absolute inset-0" id="prod-preview-${productId}"/>
+<div class="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-1 z-10">
+<button onclick="applyProductImage(${productId},'${capturedImage}')" class="px-2 py-1 bg-green-600 hover:bg-green-700 rounded text-[10px] font-bold transition text-white">✓ 적용</button>
+<button onclick="resetProductCaptureUI(${productId})" class="px-2 py-1 bg-slate-600 hover:bg-slate-700 rounded text-[10px] font-semibold transition text-white">✕ 취소</button>
+</div>
+`;
+}
+}
+
+function createDummyCapture(ctx,canvas){
+// 그라데이션 배경
+const gradient=ctx.createLinearGradient(0,0,0,canvas.height);
+gradient.addColorStop(0,'#1a1a1a');
+gradient.addColorStop(0.5,'#2d3748');
+gradient.addColorStop(1,'#1a1a1a');
+ctx.fillStyle=gradient;
+ctx.fillRect(0,0,canvas.width,canvas.height);
+
+// 텍스트
+ctx.fillStyle='white';
+ctx.font='bold 24px Pretendard';
+ctx.textAlign='center';
+ctx.fillText('📸',canvas.width/2,canvas.height/2-20);
+ctx.font='16px Pretendard';
+ctx.fillText('라이브 캡처',canvas.width/2,canvas.height/2+20);
+}
+
+function applyProductImage(productId,capturedImage){
+// products 배열에서 해당 상품 찾아서 이미지 업데이트
+const product=products.find(p=>p.id===productId);
+if(product){
+product.image=capturedImage;
+}
+
+// 다시 렌더링
+renderProducts();
+updateStoreProducts();
+}
+
+function resetProductCaptureUI(productId){
+// 초기 상태로 복귀
+const imgContainer=document.getElementById('prod-img-container-'+productId);
+if(imgContainer){
+imgContainer.innerHTML=`
+<button onclick="captureForProduct(${productId})" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-[10px] font-bold transition leading-tight">📸<br/>캡처</button>
+`;
+}
+}
+
+function addSelectedProducts(){
+const checkboxes=document.querySelectorAll('.registered-checkbox:checked');
+if(checkboxes.length===0){
+alert('상품을 선택해주세요');
+return;
+}
+const selectedIds=Array.from(checkboxes).map(cb=>parseInt(cb.value));
+selectedIds.forEach(id=>{
+const rp=registeredProducts.find(p=>p.id===id);
+if(!rp)return;
+const newId=Math.max(...products.map(p=>p.id))+1;
+products.unshift({
+id:newId,
+code:rp.code,
+name:rp.name,
+price:rp.price,
+discountRate:0,
+image:rp.image,
+stock:100,
+cart:0,
+sold:0,
+cancel:0,
+limited:false,
+limitedStatus:null,
+store:false,
+soldPrice:rp.price,
+soldCount:0,
+soldout:false
+});
+});
+closeModal();
+currentPage=1;
+renderProducts();
+alert(`${selectedIds.length}개 상품이 추가되었습니다!`);
+}
+
+function registerFlash(){
+const name=document.getElementById('flashName').value;
+const price=parseInt(document.getElementById('flashPrice').value);
+const stock=parseInt(document.getElementById('flashStock').value);
+if(!name||!price||!stock){alert('모든 항목을 입력하세요');return}
+const newId=Math.max(...products.map(p=>p.id))+1;
+products.unshift({id:newId,code:'FLASH'+newId,name,price,discountRate:0,image:null,stock,cart:0,sold:0,cancel:0,limited:false,limitedStatus:null,store:false,soldPrice:price,soldCount:0,soldout:false});
+lastFlashId=newId;
+document.getElementById('searchInput').value='';
+currentPage=1;
+renderProducts();
+closeModal();
+alert('플래시 상품이 등록되었습니다!');
+setTimeout(()=>{lastFlashId=null;renderProducts()},6000);
+}
+
+function setAutoRepeat(sec){
+autoRepeatSec=sec;
+selectedAutoRepeatBtn=sec;
+document.querySelectorAll('[id^="autoBtn"]').forEach(btn=>btn.classList.remove('bg-indigo-600'));
+document.querySelectorAll('[id^="autoBtn"]').forEach(btn=>btn.classList.add('bg-slate-800'));
+const btn=document.getElementById('autoBtn'+sec);
+if(btn){
+btn.classList.remove('bg-slate-800');
+btn.classList.add('bg-indigo-600');
+}
+}
+
+function startAutoRepeat(){
+const customSec=parseInt(document.getElementById('customRepeatSec').value);
+if(customSec>0)autoRepeatSec=customSec;
+autoRepeatMsg=document.getElementById('repeatMsg').value;
+if(!autoRepeatMsg||autoRepeatSec<=0){alert('시간과 메시지를 입력하세요');return}
+if(autoRepeatInterval)clearInterval(autoRepeatInterval);
+autoRepeatInterval=setInterval(()=>{
+chatMessages.push({id:Date.now(),user:'치즈예나',message:autoRepeatMsg,time:Date.now()});
+if(chatMessages.length>20)chatMessages.shift();
+renderChat();
+},autoRepeatSec*1000);
+closeModal();
+alert(`${autoRepeatSec}초마다 자동반복이 시작되었습니다!`);
+}
+
+function stopAutoRepeat(){
+if(autoRepeatInterval){
+clearInterval(autoRepeatInterval);
+autoRepeatInterval=null;
+}
+closeModal();
+alert('자동반복이 중지되었습니다.');
+}
+
+function unmute(user){
+mutedUsers.delete(user);
+renderChat();
+showModal('chatManagement');
+}
+
+function saveMemo(){
+currentMemo=document.getElementById('memoInput').value;
+const box=document.getElementById('memoBox');
+if(currentMemo){
+box.textContent=currentMemo;
+box.classList.remove('hidden');
+}
+closeModal();
+alert('메모가 방송화면에 표시되었습니다');
+}
+
+function clearMemo(){
+currentMemo='';
+document.getElementById('memoBox').classList.add('hidden');
+closeModal();
+alert('메모가 삭제되었습니다');
+}
+
+function editNotice(type){
+const titles={intro:'라이브 소개',benefits:'혜택 정보',shipping:'배송 정보',size:'사이즈 정보'};
+const modal=`<div class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick="closeModal()">
+<div class="bg-slate-900 rounded-2xl border border-slate-700 p-6 max-w-xl w-full" onclick="event.stopPropagation()">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-2xl font-bold">${titles[type]}</h3>
+<button onclick="closeModal()" class="p-2 hover:bg-slate-800 rounded-lg">✖️</button>
+</div>
+<textarea id="noticeEdit" class="w-full h-48 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl resize-none mb-6" maxlength="1000">공지사항 내용...</textarea>
+<div class="flex gap-3">
+<button onclick="closeModal()" class="flex-1 px-4 py-3 bg-slate-700 rounded-xl font-semibold">취소</button>
+<button onclick="saveNotice('${type}')" class="flex-1 px-4 py-3 bg-emerald-600 rounded-xl font-semibold">저장</button>
+</div></div></div>`;
+document.getElementById('modalContainer').innerHTML=modal;
+}
+
+function saveNotice(type){
+if(!confirm('변경한 내용을 적용하시겠습니까?'))return;
+const titles={intro:'📋 라이브 소개',benefits:'🎁 혜택 정보',shipping:'🚚 배송 정보',size:'📏 사이즈 정보'};
+const alertBox=document.getElementById('noticeAlert');
+alertBox.innerHTML=`<div class="bg-emerald-600/90 backdrop-blur rounded-lg p-2 text-center">
+<div class="text-[10px] font-bold">✓ ${titles[type]} 업데이트됨</div>
+</div>`;
+setTimeout(()=>alertBox.innerHTML='',5000);
+closeModal();
+alert('변경 사항이 저장되었습니다!');
+}
+
+function initChart(){
+const ctx=document.getElementById('chart').getContext('2d');
+chart=new Chart(ctx,{
+type:'line',
+data:{labels:chartLabels,datasets:[{label:'시청자',data:chartViewers,borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,0.1)',tension:0.4,fill:true}]},
+options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:true,labels:{color:'#fff',font:{size:14}}}},scales:{y:{beginAtZero:true,ticks:{color:'#94a3b8'},grid:{color:'#334155'}},x:{ticks:{color:'#94a3b8'},grid:{color:'#334155'}}}}
+});
+}
+
+function updateChart(){
+const min=Math.floor(time/60);
+const timeStr=`${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}`;
+chartLabels.push(timeStr);
+chartViewers.push(stats.currentViewers);
+chartSales.push(stats.totalSales);
+chartOrders.push(stats.orderCount);
+if(chartLabels.length>60){
+chartLabels.shift();
+chartViewers.shift();
+chartSales.shift();
+chartOrders.shift();
+}
+if(chart)chart.update();
+}
+
+function changeChart(type){
+document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+event.target.classList.add('active');
+if(!chart)return;
+let datasets=[];
+if(type==='all'){
+datasets=[
+{label:'시청자',data:chartViewers,borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,0.1)',yAxisID:'y1'},
+{label:'주문금액 (만원)',data:chartSales.map(v=>Math.round(v/10000)),borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.1)',yAxisID:'y2'},
+{label:'주문건수',data:chartOrders,borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,0.1)',yAxisID:'y2'}
+];
+chart.options.scales.y1={type:'linear',position:'left',ticks:{color:'#94a3b8'},grid:{color:'#334155'}};
+chart.options.scales.y2={type:'linear',position:'right',ticks:{color:'#94a3b8'},grid:{display:false}};
+}else{
+let data,label,color;
+if(type==='viewers'){data=chartViewers;label='시청자';color='#6366f1'}
+else if(type==='sales'){data=chartSales;label='주문금액 (원)';color='#10b981'}
+else{data=chartOrders;label='주문건수';color='#f59e0b'}
+datasets=[{label,data,borderColor:color,backgroundColor:color+'20',tension:0.4,fill:true}];
+chart.options.scales.y={beginAtZero:true,ticks:{color:'#94a3b8'},grid:{color:'#334155'}};
+delete chart.options.scales.y1;
+delete chart.options.scales.y2;
+}
+chart.data.datasets=datasets;
+chart.update();
+}
+
+function updateSalesMarkers(){
+const container=document.getElementById('salesMarkers');
+if(!container)return;
+
+let html='';
+Object.keys(salesByTime).forEach(idx=>{
+const sales=salesByTime[idx];
+if(sales&&sales.length>0){
+const leftPercent=(idx/Math.max(chartLabels.length-1,1))*100;
+html+=`<div class="absolute flex flex-col items-center" style="left:${leftPercent}%;transform:translateX(-50%)">
+<div class="text-xs bg-green-600 text-white px-2 py-1 rounded-full font-bold whitespace-nowrap">${sales.length}개</div>
+</div>`;
+}
+});
+container.innerHTML=html;
+}
+
+function updateDashboard(){
+const sorted=[...products].sort((a,b)=>(b.soldCount*b.soldPrice)-(a.soldCount*a.soldPrice)).slice(0,10);
+document.getElementById('topProducts').innerHTML=sorted.map((p,i)=>`<div class="flex items-center gap-2 p-2 bg-slate-800/50 rounded-lg">
+<div class="text-lg font-bold ${i<3?'text-yellow-400':'text-slate-400'}">${i+1}</div>
+<div class="flex-1 min-w-0">
+<div class="font-semibold text-xs truncate">${p.name}</div>
+<div class="text-[10px] text-slate-400 mt-0.5">
+<span class="text-green-400 font-bold">₩${(p.soldCount*p.soldPrice).toLocaleString()}</span>
+<span class="mx-1">•</span>
+${p.soldCount}건
+</div></div></div>`).join('');
+
+const soldout=products.filter(p=>p.soldout).slice(0,10);
+document.getElementById('soldoutProducts').innerHTML=soldout.length?soldout.map(p=>`<div class="p-2 bg-slate-800/50 rounded-lg mb-2">
+<div class="font-semibold text-xs mb-0.5">${p.name}</div>
+<div class="text-[10px] text-slate-400">판매: ${p.soldCount}건 <span class="mx-1">•</span> ₩${(p.soldCount*p.soldPrice).toLocaleString()}</div>
+</div>`).join(''):'<div class="text-center text-slate-400 py-8 text-sm">품절된 상품이 없습니다</div>';
+
+const canceled=products.filter(p=>p.cancel>0).sort((a,b)=>b.cancel-a.cancel).slice(0,10);
+document.getElementById('cancelProducts').innerHTML=canceled.length?canceled.map(p=>`<div class="p-2 bg-slate-800/50 rounded-lg mb-2">
+<div class="font-semibold text-xs mb-0.5">${p.name}</div>
+<div class="text-[10px] text-red-400">취소: ${p.cancel}건 <span class="mx-1 text-slate-400">•</span> <span class="text-slate-400">₩${(p.cancel*p.soldPrice).toLocaleString()}</span></div>
+</div>`).join(''):'<div class="text-center text-slate-400 py-8 text-sm">취소된 주문이 없습니다</div>';
+}
+
+function updateScriptStyle(){
+const editor=document.getElementById('scriptEditor');
+editor.style.fontSize=document.getElementById('scriptFontSize').value+'px';
+editor.style.color=document.getElementById('scriptColor').value;
+}
+
+function renderInquiries(){
+document.getElementById('inquiryList').innerHTML=inquiries.map(i=>`<div class="p-3 border-b border-slate-700 cursor-pointer ${i.id===currentInquiry?'bg-slate-700':'hover:bg-slate-800'}" onclick="selectInquiry(${i.id})">
+<div class="font-bold text-white mb-1">${i.name}</div>
+<div class="text-sm text-slate-400 truncate">${i.msg}</div>
+</div>`).join('');
+const inquiry=inquiries.find(i=>i.id===currentInquiry);
+if(inquiry){
+document.getElementById('chatName').textContent=inquiry.name;
+document.getElementById('chatArea').innerHTML=`<div class="chat-message bg-slate-700">${inquiry.msg}</div>`;
+document.getElementById('customerInfo').innerHTML=`<div class="mb-4"><div class="font-bold">${inquiry.name}</div><div class="text-sm text-slate-400">${inquiry.phone}</div></div>
+<div class="text-sm text-slate-400 mb-2">최근 주문</div><div class="text-sm mb-4">${inquiry.item}</div>`;
+}
+}
+
+function selectInquiry(id){
+currentInquiry=id;
+renderInquiries();
+}
+
+function sendMsg(){
+const input=document.getElementById('chatInput');
+if(!input.value.trim())return;
+const bubble=document.createElement('div');
+bubble.className='chat-message bg-indigo-600 text-white';
+bubble.textContent=input.value;
+document.getElementById('chatArea').appendChild(bubble);
+input.value='';
+}
+
+function openStorePopup(){
+document.getElementById('storePopup').classList.remove('hidden');
+}
+
+function closeStorePopup(event){
+if(event&&event.target.id!=='storePopup')return;
+document.getElementById('storePopup').classList.add('hidden');
+}
+
+function editTitle(){
+const newTitle=prompt('방송 제목:',document.getElementById('liveTitle').textContent);
+if(newTitle)document.getElementById('liveTitle').textContent=newTitle;
+}
+
+function endBroadcast(){
+if(confirm('방송을 종료하시겠습니까?')){
+alert('방송이 종료되었습니다.');
+}
+}
+
+function closeModal(){
+document.getElementById('modalContainer').innerHTML='';
+}
+
+renderStatsGrid();
+renderProducts();
+renderChat();
+updateStats();
+renderQnA();
+</script>
+</body>
+</html>
